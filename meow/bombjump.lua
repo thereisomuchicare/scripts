@@ -8,8 +8,6 @@ local Config = {
 	CanUse = true
 }
 
-local CurrentDroppedBomb = nil -- Quản lý bom dưới đất để xóa khi hết cooldown
-
 -- ROBLOX BUILT-IN GUN CURSORS
 local GUN_CURSOR = "rbxasset://textures/GunCursor.png"
 local RELOAD_CURSOR = "rbxasset://textures/GunWaitCursor.png"
@@ -102,13 +100,12 @@ local function GiveTool()
 			Mouse.Icon = RELOAD_CURSOR
 		end
 		
-		if CurrentDroppedBomb then CurrentDroppedBomb:Destroy() end
-		
 		local d_handle = BuildC4()
 		d_handle.CFrame = hrp.CFrame * CFrame.new(0, -3.2, 0)
 		d_handle.Parent = game.Workspace
 		
-		CurrentDroppedBomb = d_handle
+		-- Set the dropped bomb to automatically disappear after 22 seconds
+		game.Debris:AddItem(d_handle, 22)
 
 		local bv = Instance.new("BodyVelocity", d_handle)
 		bv.MaxForce = Vector3.new(1e5, 1e5, 1e5)
@@ -118,17 +115,19 @@ local function GiveTool()
 		
 		local parts = {}
 		for _, p in pairs(Tool:GetChildren()) do
-			if p:IsA("BasePart") then parts[p] = p.Transparency p.Transparency = 1 end
+			if p:IsA("BasePart") then 
+				parts[p] = p.Transparency 
+				p.Transparency = 1 
+			end
 		end
 		
+		-- Wait for the menu's cooldown time before restoring the tool to your hands
 		task.wait(Config.Cooldown)
 		
-		if CurrentDroppedBomb then 
-			CurrentDroppedBomb:Destroy() 
-			CurrentDroppedBomb = nil
+		for p, trans in pairs(parts) do 
+			if p then p.Transparency = trans end 
 		end
 		
-		for p, trans in pairs(parts) do if p then p.Transparency = trans end end
 		Config.CanUse = true
 		
 		-- Restore normal gun cursor after reloading if tool is equipped and on PC
