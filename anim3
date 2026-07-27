@@ -12,7 +12,7 @@ getgenv().HybridSettings = {
     fall = "Ninja",
     climb = "Adidas2",
     swim = "Rthro",
-    swimidle = "Adidas2"
+    swimidle = "Rhthro"
 }
 -- 2. Enable/Disable Mode Custom:
 -- 3. (OPTIONAL) if you want to use Single Bundle instead just set that getgenv().EnableHybridCustom = true to "false"
