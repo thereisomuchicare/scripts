@@ -11,7 +11,7 @@ getgenv().HybridSettings = {
     idle2 = "Oldschool",
     fall = "Ninja",
     climb = "Adidas2",
-    swim = "Adidas2",
+    swim = "Rthro",
     swimidle = "Adidas2"
 }
 -- 2. Enable/Disable Mode Custom:
