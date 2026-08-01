@@ -1,12 +1,12 @@
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
-local ContextActionService = game:GetService("ContextActionService")
+local RunService = game:GetService("RunService")
 
 local localPlayer = Players.LocalPlayer
 local playerGui = localPlayer:WaitForChild("PlayerGui")
 local playerScripts = localPlayer:WaitForChild("PlayerScripts")
 
--- 1. Ensure Developer allows Shift Lock in settings
+-- 1. Ensure Developer allows Shift Lock
 localPlayer.DevEnableMouseLock = true
 
 -- 2. Dynamically Generate the GUI
@@ -17,7 +17,7 @@ screenGui.Parent = playerGui
 
 local frame = Instance.new("Frame")
 frame.Size = UDim2.new(0, 220, 0, 80)
-frame.Position = UDim2.new(1, -230, 1, -90) -- Positions at Bottom Right
+frame.Position = UDim2.new(1, -230, 1, -90)
 frame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
 frame.BorderSizePixel = 0
 frame.Parent = screenGui
@@ -54,50 +54,32 @@ local isListening = false
 local currentKey = Enum.KeyCode.LeftControl
 local isShiftLocked = false
 
-local playerModule = require(playerScripts:WaitForChild("PlayerModule"))
-local cameras = playerModule:GetCameras()
-local activeMouseLock = cameras and cameras.activeMouseLock
-
--- 4. Shift Lock Toggle Handler
-local function onShiftLockToggled(actionName, inputState, inputObject)
-	if inputState == Enum.UserInputState.Begin and activeMouseLock then
-		isShiftLocked = not isShiftLocked
-		activeMouseLock:EnableMouseLock(isShiftLocked)
-	end
-	return Enum.ContextActionResult.Pass
-end
-
--- 5. Function to apply the new keybind globally
-local function applyKeybind(newKey)
-	-- Remove the default Roblox Shift keybind so they don't conflict
-	ContextActionService:UnbindAction("MouseLockSwitchAction")
-	
-	-- Unbind any old custom keys
-	ContextActionService:UnbindAction("CustomShiftLockAction")
-	
-	-- Bind the newly selected key
-	ContextActionService:BindAction("CustomShiftLockAction", onShiftLockToggled, false, newKey)
-end
-
--- Wait a moment for Roblox to finish loading its default systems, then apply ours
+-- 4. Clear Roblox's Default Shift Keys so they don't interfere
 task.spawn(function()
-	task.wait(1)
-	applyKeybind(currentKey)
+	local playerModule = require(playerScripts:WaitForChild("PlayerModule"))
+	local cameras = playerModule:GetCameras()
+	
+	-- Wait until Roblox finishes loading the mouse lock controller
+	while not cameras.activeMouseLock do
+		task.wait(0.1)
+	end
+	
+	-- Empty the default keys so standard Shift no longer does anything
+	cameras.activeMouseLock.boundKeys = {}
 end)
 
--- 6. GUI Interaction Logic (Clicking and Binding)
+-- 5. GUI Interaction Logic (Clicking to Bind)
 bindButton.MouseButton1Click:Connect(function()
 	if isListening then return end
 	isListening = true
 	bindButton.Text = "Press any key..."
-	bindButton.BackgroundColor3 = Color3.fromRGB(180, 50, 50) -- Turns red while listening
+	bindButton.BackgroundColor3 = Color3.fromRGB(180, 50, 50) -- Turns red while waiting
 end)
 
+-- 6. Input Handling (Setting the key & Toggling)
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
-	-- Only listen for keyboard inputs to avoid binding the mouse click
+	-- A. If we are currently binding a new key...
 	if isListening and input.UserInputType == Enum.UserInputType.Keyboard then
-		
-		-- If they press Escape, cancel the binding process
 		if input.KeyCode == Enum.KeyCode.Escape then
 			isListening = false
 			bindButton.Text = "Current Key: " .. currentKey.Name
@@ -105,13 +87,30 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 			return
 		end
 		
-		-- Assign the new key
+		-- Save the new key
 		currentKey = input.KeyCode
 		isListening = false
 		bindButton.Text = "Current Key: " .. currentKey.Name
 		bindButton.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
-		
-		-- Apply it to the game
-		applyKeybind(currentKey)
+		return
+	end
+
+	-- B. If we are playing normally, check if they pressed the custom toggle key
+	if not gameProcessed and not isListening then
+		if input.KeyCode == currentKey then
+			isShiftLocked = not isShiftLocked -- Flip the state (On/Off)
+		end
+	end
+end)
+
+-- 7. The Enforcer: Forces Shift Lock on or off every single frame
+RunService.RenderStepped:Connect(function()
+	local playerModule = require(playerScripts:WaitForChild("PlayerModule"))
+	local cameras = playerModule:GetCameras()
+	local activeMouseLock = cameras and cameras.activeMouseLock
+	
+	if activeMouseLock then
+		-- This forcefully bypasses the ESC Menu setting by applying it constantly
+		activeMouseLock:EnableMouseLock(isShiftLocked)
 	end
 end)
