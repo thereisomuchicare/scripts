@@ -1,24 +1,26 @@
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local rootPart = character:WaitForChild("HumanoidRootPart")
+local humanoid = character:WaitForChild("Humanoid")
 
 -- State Variables
 local glitchEnabled = false
 local glitchBox = nil
 local glitchSpeed = 150 -- Default speed
-local toggleKey = Enum.KeyCode.Z -- Default toggle keybind
-local isBinding = false -- Used when setting a new keybind
+local toggleKey = Enum.KeyCode.Z -- Default PC toggle keybind
+local isBinding = false
+local isGlitching = false
 
 -------------------------
 -- 1. GUI CLEANUP & CREATION
 -------------------------
-local guiName = "SpeedGlitchGuiV2"
+local guiName = "SpeedGlitchGuiV3"
 local guiParent = player:FindFirstChild("PlayerGui") or game:GetService("CoreGui")
 
--- Remove old GUI if it exists
 if guiParent:FindFirstChild(guiName) then
 	guiParent[guiName]:Destroy()
 end
@@ -28,21 +30,19 @@ screenGui.Name = guiName
 screenGui.ResetOnSpawn = false
 screenGui.Parent = guiParent
 
--- Main Background Frame
 local mainFrame = Instance.new("Frame")
 mainFrame.Size = UDim2.new(0, 220, 0, 150)
 mainFrame.Position = UDim2.new(0.5, -110, 0.7, 0)
 mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 mainFrame.BorderSizePixel = 0
 mainFrame.Active = true
-mainFrame.Draggable = true -- Allows you to drag the GUI around
+mainFrame.Draggable = true
 mainFrame.Parent = screenGui
 
 local uiCorner = Instance.new("UICorner")
 uiCorner.CornerRadius = UDim.new(0, 8)
 uiCorner.Parent = mainFrame
 
--- Title
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, 0, 0, 30)
 title.BackgroundTransparency = 1
@@ -52,7 +52,6 @@ title.Font = Enum.Font.GothamBold
 title.TextSize = 14
 title.Parent = mainFrame
 
--- Toggle Button
 local toggleBtn = Instance.new("TextButton")
 toggleBtn.Size = UDim2.new(0.9, 0, 0, 30)
 toggleBtn.Position = UDim2.new(0.05, 0, 0, 35)
@@ -63,7 +62,6 @@ toggleBtn.Font = Enum.Font.GothamBold
 toggleBtn.TextSize = 14
 toggleBtn.Parent = mainFrame
 
--- Speed Input Container
 local speedLabel = Instance.new("TextLabel")
 speedLabel.Size = UDim2.new(0.4, 0, 0, 30)
 speedLabel.Position = UDim2.new(0.05, 0, 0, 70)
@@ -85,7 +83,6 @@ speedBox.Font = Enum.Font.Gotham
 speedBox.TextSize = 14
 speedBox.Parent = mainFrame
 
--- Keybind Button
 local keybindBtn = Instance.new("TextButton")
 keybindBtn.Size = UDim2.new(0.9, 0, 0, 30)
 keybindBtn.Position = UDim2.new(0.05, 0, 0, 110)
@@ -104,19 +101,21 @@ local function createBox()
 	
 	glitchBox = Instance.new("Part")
 	glitchBox.Name = "GlitchBox"
-	glitchBox.Size = Vector3.new(2, 5, 2)
+	glitchBox.Size = Vector3.new(1.5, 4, 1.5)
 	glitchBox.Color = Color3.fromRGB(150, 150, 150)
 	glitchBox.Transparency = 0.5
 	glitchBox.CanCollide = false
 	glitchBox.Massless = true
+	
+	-- FIXED TELEPORTING: Position the box FIRST, then weld it.
+	-- Changed offset from 3 to 1.2 so it's directly next to the avatar.
+	glitchBox.CFrame = rootPart.CFrame * CFrame.new(1.2, 0, 0)
 	glitchBox.Parent = character
 	
 	local weld = Instance.new("WeldConstraint")
 	weld.Part0 = rootPart
 	weld.Part1 = glitchBox
 	weld.Parent = glitchBox
-	
-	glitchBox.CFrame = rootPart.CFrame * CFrame.new(3, 0, 0)
 end
 
 local function removeBox()
@@ -141,47 +140,70 @@ local function toggleGlitch()
 end
 
 local function applySpeedGlitch()
+	if isGlitching then return end
+	isGlitching = true
+	
 	local rightVector = rootPart.CFrame.RightVector
-	-- Throw the player to the right based on the custom speed (Y-axis jump force is scaled based on speed)
-	rootPart.AssemblyLinearVelocity = (rightVector * glitchSpeed) + Vector3.new(0, glitchSpeed / 3, 0)
+	
+	-- FIXED NOT WORKING: Roblox's humanoid cancels out sudden speed changes. 
+	-- Running this in a tiny loop ensures the fling successfully overpowers the game's physics.
+	for i = 1, 5 do
+		rootPart.AssemblyLinearVelocity = (rightVector * glitchSpeed) + Vector3.new(0, glitchSpeed / 3, 0)
+		task.wait()
+	end
+	
+	task.wait(0.2)
+	isGlitching = false
 end
 
--- Re-apply box if the player resets/dies
-player.CharacterAdded:Connect(function(newChar)
+-------------------------
+-- 3. JUMP & MOVEMENT DETECTION (PC + MOBILE)
+-------------------------
+local function setupCharacter(newChar)
 	character = newChar
 	rootPart = character:WaitForChild("HumanoidRootPart")
+	humanoid = character:WaitForChild("Humanoid")
+	
 	if glitchEnabled then
 		createBox()
 	end
-end)
+	
+	-- Listen directly to the Humanoid jumping instead of the keyboard
+	humanoid.Jumping:Connect(function(isActive)
+		if isActive and glitchEnabled then
+			-- If the player is moving their thumbstick/keys at all, trigger the glitch
+			if humanoid.MoveDirection.Magnitude > 0 then
+				applySpeedGlitch()
+			end
+		end
+	end)
+end
+
+player.CharacterAdded:Connect(setupCharacter)
+-- Run setup on the current character immediately
+setupCharacter(character)
 
 -------------------------
--- 3. INPUTS & SETTINGS
+-- 4. INPUTS & SETTINGS
 -------------------------
--- Toggle Button Click
 toggleBtn.MouseButton1Click:Connect(toggleGlitch)
 
--- Update Speed Setting
 speedBox.FocusLost:Connect(function()
 	local newSpeed = tonumber(speedBox.Text)
 	if newSpeed then
 		glitchSpeed = newSpeed
 	else
-		-- Reset back to previous valid speed if they typed letters instead of numbers
 		speedBox.Text = tostring(glitchSpeed)
 	end
 end)
 
--- Keybind Setup
 keybindBtn.MouseButton1Click:Connect(function()
 	isBinding = true
 	keybindBtn.Text = "Press any key..."
-	keybindBtn.BackgroundColor3 = Color3.fromRGB(150, 150, 50) -- Turn yellow while listening
+	keybindBtn.BackgroundColor3 = Color3.fromRGB(150, 150, 50)
 end)
 
--- Keyboard Input Listener
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
-	-- 1. Handle Keybinding first
 	if isBinding then
 		if input.UserInputType == Enum.UserInputType.Keyboard then
 			toggleKey = input.KeyCode
@@ -192,18 +214,9 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		return
 	end
 	
-	-- Ignore chat and other menus
 	if gameProcessed then return end
 	
-	-- 2. Handle Toggle via Hotkey
 	if input.KeyCode == toggleKey then
 		toggleGlitch()
-	end
-	
-	-- 3. Handle Speed Glitch Execution (Jump + D)
-	if glitchEnabled and input.KeyCode == Enum.KeyCode.Space then
-		if UserInputService:IsKeyDown(Enum.KeyCode.D) then
-			applySpeedGlitch()
-		end
 	end
 end)
