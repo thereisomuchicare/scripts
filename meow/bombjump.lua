@@ -4,7 +4,7 @@ local PlayerGui = Player:WaitForChild("PlayerGui")
 local UserInputService = game:GetService("UserInputService")
 
 local Config = {
-	Name = "Gold C4 Bomb", -- Default starting name
+	Name = "Gold C4 Bomb",
 	Cooldown = 2,
 	CanUse = true
 }
@@ -24,6 +24,50 @@ local function BuildC4()
 	return Main
 end
 
+-- HÀM SẮP XẾP TÚI ĐỒ (FORCE BOMB VÀO SLOT 2, 3, 4...)
+local function OrganizeBackpack()
+	local char = Player.Character
+	if not char then return end
+
+	local allTools = {}
+	
+	-- Lấy tất cả tool đang cầm và trong túi
+	for _, obj in pairs(char:GetChildren()) do
+		if obj:IsA("Tool") then table.insert(allTools, obj) end
+	end
+	for _, obj in pairs(Player.Backpack:GetChildren()) do
+		if obj:IsA("Tool") then table.insert(allTools, obj) end
+	end
+
+	local bombs = {}
+	local others = {}
+
+	-- Phân loại bom và các vật phẩm khác, đồng thời gỡ chúng ra khỏi túi tạm thời
+	for _, tool in pairs(allTools) do
+		if tool.Name == Config.Name then
+			table.insert(bombs, tool)
+		else
+			table.insert(others, tool)
+		end
+		tool.Parent = nil
+	end
+
+	-- Slot 1: Vật phẩm đầu tiên không phải bom (nếu có)
+	if #others > 0 then
+		others[1].Parent = Player.Backpack
+	end
+
+	-- Slot 2, 3, 4...: Tất cả các bom
+	for _, bomb in pairs(bombs) do
+		bomb.Parent = Player.Backpack
+	end
+
+	-- Các Slot còn lại: Các vật phẩm khác
+	for i = 2, #others do
+		others[i].Parent = Player.Backpack
+	end
+end
+
 -- TẠO MENU GUI
 local sg = Instance.new("ScreenGui", PlayerGui)
 sg.Name = "C4_Final_Menu"
@@ -37,53 +81,45 @@ toggle.BackgroundColor3 = Color3.fromRGB(255, 215, 0)
 toggle.Draggable = true
 
 local frame = Instance.new("Frame", sg)
-frame.Size = UDim2.new(0, 180, 0, 140) -- Made taller to fit the new Name input
+frame.Size = UDim2.new(0, 180, 0, 200) -- Expanded for new buttons
 frame.Position = UDim2.new(0.5, -90, 0.4, 0)
 frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 frame.Visible = false
 
 local nameInput = Instance.new("TextBox", frame)
 nameInput.Size = UDim2.new(0.8, 0, 0, 30)
-nameInput.Position = UDim2.new(0.1, 0, 0.1, 0)
+nameInput.Position = UDim2.new(0.1, 0, 0, 10)
 nameInput.Text = Config.Name
 nameInput.PlaceholderText = "Tên vật phẩm..."
 
 local input = Instance.new("TextBox", frame)
 input.Size = UDim2.new(0.8, 0, 0, 30)
-input.Position = UDim2.new(0.1, 0, 0.35, 0)
+input.Position = UDim2.new(0.1, 0, 0, 45)
 input.Text = tostring(Config.Cooldown)
 input.PlaceholderText = "Giây hồi..."
 
 local btn = Instance.new("TextButton", frame)
 btn.Size = UDim2.new(0.8, 0, 0, 30)
-btn.Position = UDim2.new(0.1, 0, 0.7, 0)
-btn.Text = "LƯU"
+btn.Position = UDim2.new(0.1, 0, 0, 80)
+btn.Text = "LƯU TÊN & HỒI CHIÊU"
 btn.BackgroundColor3 = Color3.fromRGB(255, 215, 0)
 
-toggle.MouseButton1Click:Connect(function() frame.Visible = not frame.Visible end)
-btn.MouseButton1Click:Connect(function() 
-	Config.Cooldown = tonumber(input.Text) or Config.Cooldown
-	
-	-- Live update the custom name
-	local newName = nameInput.Text
-	if newName ~= "" and newName ~= Config.Name then
-		local char = Player.Character
-		-- Check if player is holding it or if it's in their backpack
-		if char and char:FindFirstChild(Config.Name) then
-			char[Config.Name].Name = newName
-		elseif Player.Backpack:FindFirstChild(Config.Name) then
-			Player.Backpack[Config.Name].Name = newName
-		end
-		Config.Name = newName
-	end
-	
-	frame.Visible = false
-end)
+local addBtn = Instance.new("TextButton", frame)
+addBtn.Size = UDim2.new(0.8, 0, 0, 30)
+addBtn.Position = UDim2.new(0.1, 0, 0, 115)
+addBtn.Text = "+1 BOMB"
+addBtn.BackgroundColor3 = Color3.fromRGB(50, 205, 50)
 
--- CHỨC NĂNG TOOL
+local refreshBtn = Instance.new("TextButton", frame)
+refreshBtn.Size = UDim2.new(0.8, 0, 0, 30)
+refreshBtn.Position = UDim2.new(0.1, 0, 0, 150)
+refreshBtn.Text = "REFRESH (XÓA & LÀM MỚI)"
+refreshBtn.BackgroundColor3 = Color3.fromRGB(255, 69, 0)
+
+-- CHỨC NĂNG TOOL CHÍNH
 local function GiveTool()
 	local Tool = Instance.new("Tool")
-	Tool.Name = Config.Name -- Uses the name from the Config
+	Tool.Name = Config.Name
 	Tool.RequiresHandle = true
 	Tool.CanBeDropped = false
 	
@@ -92,21 +128,18 @@ local function GiveTool()
 	local C4Part = BuildC4()
 	C4Part.Parent = Tool
 	
-	-- EQUIP EVENT
 	Tool.Equipped:Connect(function()
 		if UserInputService.MouseEnabled then
 			Mouse.Icon = GUN_CURSOR
 		end
 	end)
 	
-	-- UNEQUIP EVENT
 	Tool.Unequipped:Connect(function()
 		if UserInputService.MouseEnabled then
 			Mouse.Icon = ""
 		end
 	end)
 	
-	-- ACTIVATED EVENT
 	Tool.Activated:Connect(function()
 		if not Config.CanUse then return end
 		local char = Player.Character
@@ -153,7 +186,57 @@ local function GiveTool()
 	end)
 	
 	Tool.Parent = Player.Backpack
+	OrganizeBackpack()
 end
 
-Player.CharacterAdded:Connect(function() task.wait(1) GiveTool() end)
+-- MENU BUTTON EVENTS
+toggle.MouseButton1Click:Connect(function() frame.Visible = not frame.Visible end)
+
+btn.MouseButton1Click:Connect(function() 
+	Config.Cooldown = tonumber(input.Text) or Config.Cooldown
+	
+	local newName = nameInput.Text
+	if newName ~= "" and newName ~= Config.Name then
+		local char = Player.Character
+		-- Cập nhật tên tất cả các bom đang có
+		for _, tool in pairs(Player.Backpack:GetChildren()) do
+			if tool.Name == Config.Name then tool.Name = newName end
+		end
+		if char then
+			for _, tool in pairs(char:GetChildren()) do
+				if tool.Name == Config.Name then tool.Name = newName end
+			end
+		end
+		Config.Name = newName
+	end
+	frame.Visible = false
+end)
+
+addBtn.MouseButton1Click:Connect(function()
+	GiveTool() -- Thêm 1 bom mới và tự động sắp xếp lại túi đồ
+end)
+
+refreshBtn.MouseButton1Click:Connect(function()
+	local char = Player.Character
+	-- Xóa toàn bộ bom hiện tại trong túi và tay
+	for _, tool in pairs(Player.Backpack:GetChildren()) do
+		if tool.Name == Config.Name then tool:Destroy() end
+	end
+	if char then
+		for _, tool in pairs(char:GetChildren()) do
+			if tool.Name == Config.Name then tool:Destroy() end
+		end
+	end
+	-- Khôi phục chuột mặc định phòng trường hợp đang cầm bom bị xóa
+	if UserInputService.MouseEnabled then Mouse.Icon = "" end
+	
+	Config.CanUse = true -- Reset cooldown nếu bị kẹt
+	GiveTool() -- Cấp lại 1 bom duy nhất
+end)
+
+Player.CharacterAdded:Connect(function() 
+	task.wait(1) 
+	GiveTool() 
+end)
+
 GiveTool()
