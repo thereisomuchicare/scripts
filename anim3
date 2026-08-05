@@ -6,7 +6,7 @@
 getgenv().HybridSettings = {
     run = "Levitate",
     walk = "Catwalk",
-    jump = "Werewold",
+    jump = "Werewolf",
     idle1 = "Oldschool",
     idle2 = "Oldschool",
     fall = "Werewolf",
