@@ -7,10 +7,10 @@ getgenv().HybridSettings = {
     run = "Stylish",
     walk = "Stylish",
     jump = "Vampire",
-    idle1 = "Hero",
-    idle2 = "Hero",
+    idle1 = "Oldschool",
+    idle2 = "Oldschool",
     fall = "Vampire",
-    climb = "Adidas2",
+    climb = "Stylish",
     swim = "Rthro",
     swimidle = "Rhthro"
 }
