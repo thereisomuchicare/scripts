@@ -5,7 +5,7 @@
 -- NEW ANIMS: Glow motion (Gm)
 getgenv().HybridSettings = {
     run = "Rthro",
-    walk = "Rhtro",
+    walk = "Rthro",
     jump = "Vampire",
     idle1 = "Hero",
     idle2 = "Hero",
