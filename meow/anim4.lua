@@ -4,11 +4,11 @@
 -- 1. Working anims : Ninja, Robot, Default, Rthro, Levitate, Mage, Stylish, Hero, Toy, Astronaut, Bubbly, Cartoony, Elder, Ghost, Knight, Vampire, Werewolf, Zombie, Bold, Adidas, Catwalk, Walmart, Wicked, NFL, Pirate, Adidas2, Oldschool, Unboxed, Aura, Wicked2, Ud, Toilet
 -- NEW ANIMS: Glow motion (Gm)
 getgenv().HybridSettings = {
-    run = "Bubbly",
-    walk = "Bubbly",
+    run = "Stylish",
+    walk = "Stylish",
     jump = "Vampire",
-    idle1 = "Superhero",
-    idle2 = "Superhero",
+    idle1 = "Hero",
+    idle2 = "Hero",
     fall = "Vampire",
     climb = "Adidas2",
     swim = "Rthro",
