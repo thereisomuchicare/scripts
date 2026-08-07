@@ -19,22 +19,33 @@ local GUN_CURSOR = "rbxasset://textures/GunCursor.png"
 local RELOAD_CURSOR = "rbxasset://textures/GunWaitCursor.png"
 
 -- ============================================================================
--- 1. MODEL BUILDER (OFFICIAL FAKE C4 GEAR ASSET)
+-- 1. MODEL BUILDER (GUARANTEED VISIBLE)
 -- ============================================================================
 local function BuildC4Handle()
 	local Handle = Instance.new("Part")
 	Handle.Name = "Handle"
-	Handle.Size = Vector3.new(1.8, 0.7, 1.2)
+	Handle.Size = Vector3.new(1.5, 0.6, 1.2)
+	Handle.Color = Color3.fromRGB(30, 30, 30) -- Dark gray/black C4 color
+	Handle.Material = Enum.Material.Plastic
 	Handle.CanCollide = true
-	Handle.Material = Enum.Material.SmoothPlastic
 	Handle.Transparency = 0
-
-	-- Fake C4 Mesh & Texture (Catalog Asset ID: 104642566)
-	local Mesh = Instance.new("SpecialMesh")
-	Mesh.MeshId = "rbxassetid://104642566"
-	Mesh.TextureId = "rbxassetid://104642537"
-	Mesh.Scale = Vector3.new(1, 1, 1)
-	Mesh.Parent = Handle
+	
+	-- Add a red "light" on top to make it look like C4
+	local Light = Instance.new("Part")
+	Light.Name = "LightIndicator"
+	Light.Size = Vector3.new(0.4, 0.2, 0.4)
+	Light.Color = Color3.fromRGB(255, 0, 0)
+	Light.Material = Enum.Material.Neon
+	Light.CanCollide = false
+	Light.Massless = true
+	
+	local Weld = Instance.new("WeldConstraint")
+	Weld.Part0 = Handle
+	Weld.Part1 = Light
+	Weld.Parent = Handle
+	
+	Light.CFrame = Handle.CFrame * CFrame.new(0, 0.3, 0)
+	Light.Parent = Handle
 
 	return Handle
 end
@@ -66,27 +77,15 @@ local function OrganizeBackpack()
 		tool.Parent = nil
 	end
 
-	-- Slot 1: First non-bomb item (if available)
-	if #others > 0 then
-		others[1].Parent = Player.Backpack
-	end
-
-	-- Slots 2+: All C4 Bombs
-	for _, bomb in ipairs(bombs) do
-		bomb.Parent = Player.Backpack
-	end
-
-	-- Remaining Slots: Other tools
-	for i = 2, #others do
-		others[i].Parent = Player.Backpack
-	end
+	if #others > 0 then others[1].Parent = Player.Backpack end
+	for _, bomb in ipairs(bombs) do bomb.Parent = Player.Backpack end
+	for i = 2, #others do others[i].Parent = Player.Backpack end
 end
 
 -- ============================================================================
 -- 3. GUI CREATION (STARTUP CHOICE & MAIN MENU)
 -- ============================================================================
 
--- Startup Choice GUI
 local startupGui = Instance.new("ScreenGui", PlayerGui)
 startupGui.Name = "C4_StartupChoice"
 startupGui.ResetOnSpawn = false
@@ -96,9 +95,7 @@ choiceFrame.Size = UDim2.new(0, 360, 0, 190)
 choiceFrame.Position = UDim2.new(0.5, -180, 0.5, -95)
 choiceFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 choiceFrame.BorderSizePixel = 0
-
-local uiCornerPrompt = Instance.new("UICorner", choiceFrame)
-uiCornerPrompt.CornerRadius = UDim.new(0, 8)
+Instance.new("UICorner", choiceFrame).CornerRadius = UDim.new(0, 8)
 
 local titleLabel = Instance.new("TextLabel", choiceFrame)
 titleLabel.Size = UDim2.new(1, 0, 0, 45)
@@ -128,7 +125,6 @@ btnOld.Font = Enum.Font.SourceSansBold
 btnOld.TextSize = 14
 Instance.new("UICorner", btnOld).CornerRadius = UDim.new(0, 6)
 
--- Main Menu GUI
 local sg = Instance.new("ScreenGui", PlayerGui)
 sg.Name = "C4_Final_Menu"
 sg.ResetOnSpawn = false
@@ -201,7 +197,10 @@ local function GiveTool()
 	Tool.Name = Config.Name
 	Tool.RequiresHandle = true
 	Tool.CanBeDropped = false
-	Tool.Grip = CFrame.new(0, -0.2, 0.2) * CFrame.Angles(0, math.rad(180), 0)
+	Tool.Grip = CFrame.new(0, -0.2, 0.2)
+	
+	-- Applies the official Fake C4 catalog thumbnail to your backpack icon
+	Tool.TextureId = "rbxthumb://type=Asset&id=104642566&w=150&h=150"
 
 	local C4Handle = BuildC4Handle()
 	C4Handle.Parent = Tool
@@ -233,9 +232,10 @@ local function GiveTool()
 		local d_handle = BuildC4Handle()
 
 		if Config.PlacementMode == "CursorTarget" then
-			-- NEW FEATURE: Spawns directly at the 3D mouse hit location (real gear behavior)
+			-- NEW FEATURE: Spawns exactly at the 3D mouse hit location (real gear behavior)
+			-- Added a slight Y offset so it sits on top of the ground instead of glitching into it
 			local targetHit = Mouse.Hit
-			d_handle.CFrame = CFrame.new(targetHit.Position)
+			d_handle.CFrame = CFrame.new(targetHit.Position + Vector3.new(0, 0.3, 0))
 		else
 			-- OLD FEATURE: Drops under avatar and launches forward
 			d_handle.CFrame = hrp.CFrame * CFrame.new(0, -3.2, 0)
@@ -249,11 +249,16 @@ local function GiveTool()
 		Debris:AddItem(d_handle, 22)
 
 		-- Hide tool in hand during cooldown
-		C4Handle.Transparency = 1
+		for _, p in pairs(Tool:GetChildren()) do
+			if p:IsA("BasePart") then p.Transparency = 1 end
+		end
 
 		task.wait(Config.Cooldown)
 
-		C4Handle.Transparency = 0
+		-- Show tool again
+		for _, p in pairs(Tool:GetChildren()) do
+			if p:IsA("BasePart") then p.Transparency = 0 end
+		end
 		Config.CanUse = true
 
 		if Tool.Parent == char and UserInputService.MouseEnabled then
@@ -305,9 +310,7 @@ btn.MouseButton1Click:Connect(function()
 	frame.Visible = false
 end)
 
-addBtn.MouseButton1Click:Connect(function()
-	GiveTool()
-end)
+addBtn.MouseButton1Click:Connect(function() GiveTool() end)
 
 refreshBtn.MouseButton1Click:Connect(function()
 	local char = Player.Character
