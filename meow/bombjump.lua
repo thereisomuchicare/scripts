@@ -11,7 +11,8 @@ local Config = {
 	Name = "Fake C4",
 	Cooldown = 2,
 	CanUse = true,
-	PlacementMode = nil -- "CursorTarget" (Real Gear Style) or "ClassicThrow"
+	PlacementMode = "ClassicThrow", -- "CursorTarget" or "ClassicThrow"
+	ThrowPower = 65
 }
 
 -- ROBLOX BUILT-IN GUN CURSORS
@@ -19,40 +20,21 @@ local GUN_CURSOR = "rbxasset://textures/GunCursor.png"
 local RELOAD_CURSOR = "rbxasset://textures/GunWaitCursor.png"
 
 -- ============================================================================
--- 1. MODEL BUILDER (GUARANTEED VISIBLE)
+-- 1. HELPER FUNCTIONS
 -- ============================================================================
-local function BuildC4Handle()
-	local Handle = Instance.new("Part")
-	Handle.Name = "Handle"
-	Handle.Size = Vector3.new(1.5, 0.6, 1.2)
-	Handle.Color = Color3.fromRGB(30, 30, 30) -- Dark gray/black C4 color
-	Handle.Material = Enum.Material.Plastic
-	Handle.CanCollide = true
-	Handle.Transparency = 0
-	
-	-- Add a red "light" on top to make it look like C4
-	local Light = Instance.new("Part")
-	Light.Name = "LightIndicator"
-	Light.Size = Vector3.new(0.4, 0.2, 0.4)
-	Light.Color = Color3.fromRGB(255, 0, 0)
-	Light.Material = Enum.Material.Neon
-	Light.CanCollide = false
-	Light.Massless = true
-	
-	local Weld = Instance.new("WeldConstraint")
-	Weld.Part0 = Handle
-	Weld.Part1 = Light
-	Weld.Parent = Handle
-	
-	Light.CFrame = Handle.CFrame * CFrame.new(0, 0.3, 0)
-	Light.Parent = Handle
 
-	return Handle
+-- Sets transparency for handle and any nested meshes/decals
+local function SetHandleTransparency(handle, alpha)
+	if not handle then return end
+	handle.Transparency = alpha
+	for _, child in ipairs(handle:GetDescendants()) do
+		if child:IsA("BasePart") or child:IsA("Decal") or child:IsA("Texture") then
+			child.Transparency = alpha
+		end
+	end
 end
 
--- ============================================================================
--- 2. BACKPACK INVENTORY ORGANIZER (SLOTS 2, 3, 4...)
--- ============================================================================
+-- Backpack Auto-Organizer (Places C4 items starting at Slot 2)
 local function OrganizeBackpack()
 	local char = Player.Character
 	if not char then return end
@@ -82,8 +64,26 @@ local function OrganizeBackpack()
 	for i = 2, #others do others[i].Parent = Player.Backpack end
 end
 
+-- Find an existing Fake C4 tool in Backpack or Character to use as master template
+local function GetMasterTemplate()
+	local char = Player.Character
+	if char then
+		for _, item in ipairs(char:GetChildren()) do
+			if item:IsA("Tool") and item:FindFirstChild("Handle") then
+				return item
+			end
+		end
+	end
+	for _, item in ipairs(Player.Backpack:GetChildren()) do
+		if item:IsA("Tool") and item:FindFirstChild("Handle") then
+			return item
+		end
+	end
+	return nil
+end
+
 -- ============================================================================
--- 3. GUI CREATION (STARTUP CHOICE & MAIN MENU)
+-- 2. GUI CREATION (STARTUP CHOICE & MAIN MENU)
 -- ============================================================================
 
 local startupGui = Instance.new("ScreenGui", PlayerGui)
@@ -108,7 +108,7 @@ titleLabel.BackgroundTransparency = 1
 local btnNew = Instance.new("TextButton", choiceFrame)
 btnNew.Size = UDim2.new(0.85, 0, 0, 45)
 btnNew.Position = UDim2.new(0.075, 0, 0.3, 0)
-btnNew.Text = "New Mode (Spawns exactly at Mouse Click)"
+btnNew.Text = "New Mode (Spawns at Mouse Click)"
 btnNew.BackgroundColor3 = Color3.fromRGB(0, 140, 240)
 btnNew.TextColor3 = Color3.fromRGB(255, 255, 255)
 btnNew.Font = Enum.Font.SourceSansBold
@@ -118,13 +118,14 @@ Instance.new("UICorner", btnNew).CornerRadius = UDim.new(0, 6)
 local btnOld = Instance.new("TextButton", choiceFrame)
 btnOld.Size = UDim2.new(0.85, 0, 0, 45)
 btnOld.Position = UDim2.new(0.075, 0, 0.62, 0)
-btnOld.Text = "Classic Mode (Spawns at feet & Thrown)"
+btnOld.Text = "Classic Mode (Arc Throw Forward)"
 btnOld.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
 btnOld.TextColor3 = Color3.fromRGB(255, 255, 255)
 btnOld.Font = Enum.Font.SourceSansBold
 btnOld.TextSize = 14
 Instance.new("UICorner", btnOld).CornerRadius = UDim.new(0, 6)
 
+-- Main Menu GUI
 local sg = Instance.new("ScreenGui", PlayerGui)
 sg.Name = "C4_Final_Menu"
 sg.ResetOnSpawn = false
@@ -166,10 +167,10 @@ input.TextSize = 14
 local btn = Instance.new("TextButton", frame)
 btn.Size = UDim2.new(0.85, 0, 0, 32)
 btn.Position = UDim2.new(0.075, 0, 0, 88)
-btn.Text = "SAVE NAME & COOLDOWN"
+btn.Text = "SAVE COOLDOWN & NAME"
 btn.BackgroundColor3 = Color3.fromRGB(255, 215, 0)
 btn.Font = Enum.Font.SourceSansBold
-btn.TextSize = 12
+btn.TextSize = 11
 
 local addBtn = Instance.new("TextButton", frame)
 addBtn.Size = UDim2.new(0.85, 0, 0, 32)
@@ -190,21 +191,25 @@ refreshBtn.Font = Enum.Font.SourceSansBold
 refreshBtn.TextSize = 12
 
 -- ============================================================================
--- 4. TOOL DISPATCHER & LOGIC
+-- 3. TOOL SETUP & COMBINED THROWING MECHANICS
 -- ============================================================================
-local function GiveTool()
-	local Tool = Instance.new("Tool")
+
+local masterTemplateTool = nil
+
+local function BindToolLogic(Tool)
 	Tool.Name = Config.Name
 	Tool.RequiresHandle = true
 	Tool.CanBeDropped = false
-	Tool.Grip = CFrame.new(0, -0.2, 0.2)
 	
-	-- Applies the official Fake C4 catalog thumbnail to your backpack icon
-	Tool.TextureId = "rbxthumb://type=Asset&id=104642566&w=150&h=150"
+	-- Preserve or apply official catalog icon
+	if Tool.TextureId == "" then
+		Tool.TextureId = "rbxthumb://type=Asset&id=104642566&w=150&h=150"
+	end
 
-	local C4Handle = BuildC4Handle()
-	C4Handle.Parent = Tool
+	local handle = Tool:FindFirstChild("Handle")
+	if not handle then return end
 
+	-- Mouse Gun Cursor Events
 	Tool.Equipped:Connect(function()
 		if UserInputService.MouseEnabled then
 			Mouse.Icon = GUN_CURSOR
@@ -215,13 +220,15 @@ local function GiveTool()
 		if UserInputService.MouseEnabled then
 			Mouse.Icon = ""
 		end
+		SetHandleTransparency(handle, 0)
 	end)
 
+	-- Activation Mechanics
 	Tool.Activated:Connect(function()
 		if not Config.CanUse then return end
 		local char = Player.Character
 		local hrp = char and char:FindFirstChild("HumanoidRootPart")
-		if not hrp then return end
+		if not hrp or not handle then return end
 
 		Config.CanUse = false
 
@@ -229,56 +236,107 @@ local function GiveTool()
 			Mouse.Icon = RELOAD_CURSOR
 		end
 
-		local d_handle = BuildC4Handle()
+		-- Clone REAL handle (mesh & textures intact)
+		local c4 = handle:Clone()
+		c4.Name = "ThrownFakeC4"
+		c4.CanCollide = true
+		c4.Anchored = false
+
+		-- Remove internal welds so it doesn't stick to the avatar's hand
+		for _, child in ipairs(c4:GetChildren()) do
+			if child:IsA("Weld") or child:IsA("JointInstance") then
+				child:Destroy()
+			end
+		end
 
 		if Config.PlacementMode == "CursorTarget" then
-			-- NEW FEATURE: Spawns exactly at the 3D mouse hit location (real gear behavior)
-			-- Added a slight Y offset so it sits on top of the ground instead of glitching into it
-			local targetHit = Mouse.Hit
-			d_handle.CFrame = CFrame.new(targetHit.Position + Vector3.new(0, 0.3, 0))
+			-- NEW MODE: Spawns directly at Mouse target position
+			local targetHit = Mouse.Hit.Position
+			c4.CFrame = CFrame.new(targetHit + Vector3.new(0, 0.4, 0))
+			c4.Anchored = true
 		else
-			-- OLD FEATURE: Drops under avatar and launches forward
-			d_handle.CFrame = hrp.CFrame * CFrame.new(0, -3.2, 0)
-			local bv = Instance.new("BodyVelocity", d_handle)
-			bv.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-			bv.Velocity = ((Mouse.Hit.p - hrp.Position).Unit * 25) + Vector3.new(0, 10, 0)
-			Debris:AddItem(bv, 0.1)
+			-- CLASSIC MODE: Spawns in front of avatar and throws towards mouse
+			local spawnPos = hrp.CFrame.Position + (hrp.CFrame.LookVector * 2.5) + Vector3.new(0, 1, 0)
+			c4.CFrame = CFrame.new(spawnPos, Mouse.Hit.Position)
+			
+			local direction = (Mouse.Hit.Position - spawnPos).Unit
+			c4.AssemblyLinearVelocity = direction * Config.ThrowPower + Vector3.new(0, 15, 0)
+			c4.AssemblyAngularVelocity = Vector3.new(math.random(-15, 15), math.random(-15, 15), math.random(-15, 15))
+
+			-- Stick to surfaces on touch
+			local hasLanded = false
+			c4.Touched:Connect(function(hit)
+				if hasLanded or hit:IsDescendantOf(char) then return end
+				hasLanded = true
+				c4.Anchored = true
+				c4.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+				c4.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+			end)
 		end
 
-		d_handle.Parent = game.Workspace
-		Debris:AddItem(d_handle, 22)
+		c4.Parent = workspace
+		Debris:AddItem(c4, 15)
 
-		-- Hide tool in hand during cooldown
-		for _, p in pairs(Tool:GetChildren()) do
-			if p:IsA("BasePart") then p.Transparency = 1 end
-		end
+		-- Hide current held item during cooldown
+		SetHandleTransparency(handle, 1)
 
 		task.wait(Config.Cooldown)
 
-		-- Show tool again
-		for _, p in pairs(Tool:GetChildren()) do
-			if p:IsA("BasePart") then p.Transparency = 0 end
-		end
+		-- Re-enable held item
+		SetHandleTransparency(handle, 0)
 		Config.CanUse = true
 
 		if Tool.Parent == char and UserInputService.MouseEnabled then
 			Mouse.Icon = GUN_CURSOR
 		end
 	end)
+end
 
-	Tool.Parent = Player.Backpack
+local function GiveTool()
+	if not masterTemplateTool then
+		masterTemplateTool = GetMasterTemplate()
+	end
+
+	local newTool
+	if masterTemplateTool then
+		newTool = masterTemplateTool:Clone()
+	else
+		-- Fallback if no tool exists in StarterPack/Backpack
+		newTool = Instance.new("Tool")
+		local handle = Instance.new("Part")
+		handle.Name = "Handle"
+		handle.Size = Vector3.new(1.8, 0.7, 1.2)
+		
+		local mesh = Instance.new("SpecialMesh")
+		mesh.MeshId = "rbxassetid://104642566"
+		mesh.TextureId = "rbxassetid://104642537"
+		mesh.Parent = handle
+		handle.Parent = newTool
+	end
+
+	BindToolLogic(newTool)
+	newTool.Parent = Player.Backpack
 	OrganizeBackpack()
 end
 
 -- ============================================================================
--- 5. INITIALIZATION & MENU EVENT BINDINGS
+-- 4. INITIALIZATION & MENU EVENT BINDINGS
 -- ============================================================================
+
 local function InitializeScript(mode)
 	Config.PlacementMode = mode
 	startupGui:Destroy()
 	sg.Enabled = true
 
-	GiveTool()
+	-- Find master C4 item in inventory and bind or create
+	local existingTool = GetMasterTemplate()
+	if existingTool then
+		masterTemplateTool = existingTool:Clone()
+		BindToolLogic(existingTool)
+		OrganizeBackpack()
+	else
+		GiveTool()
+	end
 
 	Player.CharacterAdded:Connect(function()
 		task.wait(1)
@@ -298,11 +356,11 @@ btn.MouseButton1Click:Connect(function()
 	if newName ~= "" and newName ~= Config.Name then
 		local char = Player.Character
 		for _, tool in ipairs(Player.Backpack:GetChildren()) do
-			if tool.Name == Config.Name then tool.Name = newName end
+			if tool:IsA("Tool") then tool.Name = newName end
 		end
 		if char then
 			for _, tool in ipairs(char:GetChildren()) do
-				if tool.Name == Config.Name then tool.Name = newName end
+				if tool:IsA("Tool") then tool.Name = newName end
 			end
 		end
 		Config.Name = newName
@@ -310,16 +368,18 @@ btn.MouseButton1Click:Connect(function()
 	frame.Visible = false
 end)
 
-addBtn.MouseButton1Click:Connect(function() GiveTool() end)
+addBtn.MouseButton1Click:Connect(function()
+	GiveTool()
+end)
 
 refreshBtn.MouseButton1Click:Connect(function()
 	local char = Player.Character
 	for _, tool in ipairs(Player.Backpack:GetChildren()) do
-		if tool.Name == Config.Name then tool:Destroy() end
+		if tool:IsA("Tool") and tool:FindFirstChild("Handle") then tool:Destroy() end
 	end
 	if char then
 		for _, tool in ipairs(char:GetChildren()) do
-			if tool.Name == Config.Name then tool:Destroy() end
+			if tool:IsA("Tool") and tool:FindFirstChild("Handle") then tool:Destroy() end
 		end
 	end
 
