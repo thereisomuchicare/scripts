@@ -13,7 +13,7 @@ local Config = {
 local GUN_CURSOR = "rbxasset://textures/GunCursor.png"
 local RELOAD_CURSOR = "rbxasset://textures/GunWaitCursor.png"
 
--- FUNCTION TO CREATE A SINGLE PART HANDLE
+-- FUNCTION TO CREATE EXACTLY 1 SINGLE PART
 local function BuildC4()
 	local Main = Instance.new("Part")
 	Main.Name = "Handle"
@@ -24,13 +24,14 @@ local function BuildC4()
 	return Main
 end
 
--- BACKPACK ORGANIZATION (FORCES BOMBS INTO SLOTS 2, 3, 4...)
+-- BACKPACK ORGANIZATION FUNCTION (FORCES BOMBS INTO SLOTS 2, 3, 4...)
 local function OrganizeBackpack()
 	local char = Player.Character
 	if not char then return end
 
 	local allTools = {}
 	
+	-- Get all tools currently equipped and in backpack
 	for _, obj in pairs(char:GetChildren()) do
 		if obj:IsA("Tool") then table.insert(allTools, obj) end
 	end
@@ -41,6 +42,7 @@ local function OrganizeBackpack()
 	local bombs = {}
 	local others = {}
 
+	-- Categorize bombs and other items, temporarily removing them from backpack
 	for _, tool in pairs(allTools) do
 		if tool.Name == Config.Name then
 			table.insert(bombs, tool)
@@ -50,7 +52,7 @@ local function OrganizeBackpack()
 		tool.Parent = nil
 	end
 
-	-- Slot 1: First non-bomb item (if available)
+	-- Slot 1: First non-bomb item (if any)
 	if #others > 0 then
 		others[1].Parent = Player.Backpack
 	end
@@ -67,7 +69,7 @@ local function OrganizeBackpack()
 end
 
 -- ============================================================================
--- GUI CREATION (REDESIGNED & TRANSLATED UI)
+-- CREATE GUI MENU (REDESIGNED UI)
 -- ============================================================================
 local sg = Instance.new("ScreenGui", PlayerGui)
 sg.Name = "C4_Final_Menu"
@@ -92,7 +94,7 @@ frame.BorderSizePixel = 0
 frame.Visible = false
 Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
 
--- UIListLayout for clean automatic spacing
+-- Use UIListLayout to automatically space buttons evenly
 local listLayout = Instance.new("UIListLayout", frame)
 listLayout.SortOrder = Enum.SortOrder.LayoutOrder
 listLayout.Padding = UDim.new(0, 10)
@@ -102,7 +104,7 @@ local padding = Instance.new("UIPadding", frame)
 padding.PaddingTop = UDim.new(0, 15)
 padding.PaddingBottom = UDim.new(0, 15)
 
--- Helper functions for UI elements
+-- Helper function to create UI elements cleanly
 local function createTextBox(placeholder, text, order)
 	local tb = Instance.new("TextBox")
 	tb.Size = UDim2.new(0.9, 0, 0, 32)
@@ -133,16 +135,16 @@ local function createButton(text, bgColor, textColor, order)
 	return b
 end
 
--- Initialize Inputs and Buttons (English)
+-- Initialize Inputs and Buttons
 local nameInput = createTextBox("Item name...", Config.Name, 1)
-local input = createTextBox("Cooldown (sec)...", tostring(Config.Cooldown), 2)
+local input = createTextBox("Cooldown seconds...", tostring(Config.Cooldown), 2)
 local btn = createButton("SAVE NAME & COOLDOWN", Color3.fromRGB(255, 215, 0), Color3.fromRGB(30, 30, 30), 3)
 local addBtn = createButton("+1 BOMB", Color3.fromRGB(50, 205, 50), Color3.fromRGB(255, 255, 255), 4)
 local refreshBtn = createButton("REFRESH (CLEAR & RESET)", Color3.fromRGB(220, 60, 50), Color3.fromRGB(255, 255, 255), 5)
 
 
 -- ============================================================================
--- MAIN TOOL MECHANICS
+-- MAIN TOOL FUNCTIONALITY
 -- ============================================================================
 local function GiveTool()
 	local Tool = Instance.new("Tool")
@@ -227,7 +229,7 @@ btn.MouseButton1Click:Connect(function()
 	local newName = nameInput.Text
 	if newName ~= "" and newName ~= Config.Name then
 		local char = Player.Character
-		-- Update name of all existing bombs
+		-- Update the name of all existing bombs
 		for _, tool in pairs(Player.Backpack:GetChildren()) do
 			if tool.Name == Config.Name then tool.Name = newName end
 		end
@@ -242,12 +244,12 @@ btn.MouseButton1Click:Connect(function()
 end)
 
 addBtn.MouseButton1Click:Connect(function()
-	GiveTool() -- Add 1 new bomb and reorganize inventory
+	GiveTool() -- Add 1 new bomb and automatically reorganize backpack
 end)
 
 refreshBtn.MouseButton1Click:Connect(function()
 	local char = Player.Character
-	-- Delete all current bombs in inventory and hand
+	-- Delete all current bombs in backpack and hand
 	for _, tool in pairs(Player.Backpack:GetChildren()) do
 		if tool.Name == Config.Name then tool:Destroy() end
 	end
@@ -256,11 +258,11 @@ refreshBtn.MouseButton1Click:Connect(function()
 			if tool.Name == Config.Name then tool:Destroy() end
 		end
 	end
-	-- Reset cursor in case a bomb was held when deleted
+	-- Restore default cursor in case a held bomb was deleted
 	if UserInputService.MouseEnabled then Mouse.Icon = "" end
 	
 	Config.CanUse = true -- Reset cooldown if stuck
-	GiveTool() -- Give a single fresh bomb
+	GiveTool() -- Give a single bomb back
 end)
 
 Player.CharacterAdded:Connect(function() 
