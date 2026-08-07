@@ -1,6 +1,5 @@
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
 local Debris = game:GetService("Debris")
 
 local Player = Players.LocalPlayer
@@ -12,14 +11,12 @@ local Config = {
 	Name = "Fake C4",
 	Cooldown = 2,
 	CanUse = true,
-	CursorMode = nil -- Selected on execution: "New" (Cursor Follower) or "Old" (Classic Gun Asset)
+	PlacementMode = nil -- "CursorTarget" (Real Gear Style) or "ClassicThrow"
 }
 
 -- ROBLOX BUILT-IN GUN CURSORS
 local GUN_CURSOR = "rbxasset://textures/GunCursor.png"
 local RELOAD_CURSOR = "rbxasset://textures/GunWaitCursor.png"
-
-local renderConnection = nil
 
 -- ============================================================================
 -- 1. MODEL BUILDER (OFFICIAL FAKE C4 GEAR ASSET)
@@ -30,6 +27,7 @@ local function BuildC4Handle()
 	Handle.Size = Vector3.new(1.8, 0.7, 1.2)
 	Handle.CanCollide = true
 	Handle.Material = Enum.Material.SmoothPlastic
+	Handle.Transparency = 0
 
 	-- Fake C4 Mesh & Texture (Catalog Asset ID: 104642566)
 	local Mesh = Instance.new("SpecialMesh")
@@ -85,7 +83,7 @@ local function OrganizeBackpack()
 end
 
 -- ============================================================================
--- 3. GUI CREATION (STARTUP PROMPT, CURSOR OVERLAY, MAIN MENU)
+-- 3. GUI CREATION (STARTUP CHOICE & MAIN MENU)
 -- ============================================================================
 
 -- Startup Choice GUI
@@ -94,8 +92,8 @@ startupGui.Name = "C4_StartupChoice"
 startupGui.ResetOnSpawn = false
 
 local choiceFrame = Instance.new("Frame", startupGui)
-choiceFrame.Size = UDim2.new(0, 340, 0, 190)
-choiceFrame.Position = UDim2.new(0.5, -170, 0.5, -95)
+choiceFrame.Size = UDim2.new(0, 360, 0, 190)
+choiceFrame.Position = UDim2.new(0.5, -180, 0.5, -95)
 choiceFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 choiceFrame.BorderSizePixel = 0
 
@@ -104,7 +102,7 @@ uiCornerPrompt.CornerRadius = UDim.new(0, 8)
 
 local titleLabel = Instance.new("TextLabel", choiceFrame)
 titleLabel.Size = UDim2.new(1, 0, 0, 45)
-titleLabel.Text = "SELECT CURSOR MODE"
+titleLabel.Text = "SELECT C4 SPAWN BEHAVIOR"
 titleLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
 titleLabel.TextSize = 16
 titleLabel.Font = Enum.Font.SourceSansBold
@@ -113,7 +111,7 @@ titleLabel.BackgroundTransparency = 1
 local btnNew = Instance.new("TextButton", choiceFrame)
 btnNew.Size = UDim2.new(0.85, 0, 0, 45)
 btnNew.Position = UDim2.new(0.075, 0, 0.3, 0)
-btnNew.Text = "New Mode (Follow Cursor + HUD Text)"
+btnNew.Text = "New Mode (Spawns exactly at Mouse Click)"
 btnNew.BackgroundColor3 = Color3.fromRGB(0, 140, 240)
 btnNew.TextColor3 = Color3.fromRGB(255, 255, 255)
 btnNew.Font = Enum.Font.SourceSansBold
@@ -123,30 +121,12 @@ Instance.new("UICorner", btnNew).CornerRadius = UDim.new(0, 6)
 local btnOld = Instance.new("TextButton", choiceFrame)
 btnOld.Size = UDim2.new(0.85, 0, 0, 45)
 btnOld.Position = UDim2.new(0.075, 0, 0.62, 0)
-btnOld.Text = "Classic Mode (Roblox Gun Cursor)"
+btnOld.Text = "Classic Mode (Spawns at feet & Thrown)"
 btnOld.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
 btnOld.TextColor3 = Color3.fromRGB(255, 255, 255)
 btnOld.Font = Enum.Font.SourceSansBold
 btnOld.TextSize = 14
 Instance.new("UICorner", btnOld).CornerRadius = UDim.new(0, 6)
-
--- Custom Cursor ScreenGui (For "New" Mode)
-local customCursorGui = Instance.new("ScreenGui", PlayerGui)
-customCursorGui.Name = "C4_CustomCursor"
-customCursorGui.ResetOnSpawn = false
-customCursorGui.Enabled = false
-
-local cursorTextLabel = Instance.new("TextLabel", customCursorGui)
-cursorTextLabel.Size = UDim2.new(0, 120, 0, 25)
-cursorTextLabel.BackgroundTransparency = 1
-cursorTextLabel.Text = "Fake C4"
-cursorTextLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-cursorTextLabel.TextScaled = true
-cursorTextLabel.Font = Enum.Font.SourceSansBold
-
-local stroke = Instance.new("UIStroke", cursorTextLabel)
-stroke.Thickness = 1.5
-stroke.Color = Color3.fromRGB(0, 0, 0)
 
 -- Main Menu GUI
 local sg = Instance.new("ScreenGui", PlayerGui)
@@ -223,44 +203,21 @@ local function GiveTool()
 	Tool.CanBeDropped = false
 	Tool.Grip = CFrame.new(0, -0.2, 0.2) * CFrame.Angles(0, math.rad(180), 0)
 
-	local Handle = BuildC4Handle()
-	Handle.Parent = Tool
+	local C4Handle = BuildC4Handle()
+	C4Handle.Parent = Tool
 
-	-- Equip Logic
 	Tool.Equipped:Connect(function()
 		if UserInputService.MouseEnabled then
-			if Config.CursorMode == "New" then
-				UserInputService.MouseIconEnabled = false
-				customCursorGui.Enabled = true
-				cursorTextLabel.Text = Config.Name
-				if renderConnection then renderConnection:Disconnect() end
-				renderConnection = RunService.RenderStepped:Connect(function()
-					local mPos = UserInputService:GetMouseLocation()
-					cursorTextLabel.Position = UDim2.new(0, mPos.X - 60, 0, mPos.Y + 18)
-				end)
-			else
-				Mouse.Icon = GUN_CURSOR
-			end
+			Mouse.Icon = GUN_CURSOR
 		end
 	end)
 
-	-- Unequip Logic
 	Tool.Unequipped:Connect(function()
 		if UserInputService.MouseEnabled then
-			if Config.CursorMode == "New" then
-				UserInputService.MouseIconEnabled = true
-				customCursorGui.Enabled = false
-				if renderConnection then
-					renderConnection:Disconnect()
-					renderConnection = nil
-				end
-			else
-				Mouse.Icon = ""
-			end
+			Mouse.Icon = ""
 		end
 	end)
 
-	-- Activation (Throw) Logic
 	Tool.Activated:Connect(function()
 		if not Config.CanUse then return end
 		local char = Player.Character
@@ -270,42 +227,37 @@ local function GiveTool()
 		Config.CanUse = false
 
 		if UserInputService.MouseEnabled then
-			if Config.CursorMode == "New" then
-				cursorTextLabel.Text = "reloading"
-			else
-				Mouse.Icon = RELOAD_CURSOR
-			end
+			Mouse.Icon = RELOAD_CURSOR
 		end
 
-		-- Spawn dropped C4 bomb using Fake C4 Mesh
 		local d_handle = BuildC4Handle()
-		d_handle.CFrame = hrp.CFrame * CFrame.new(0, -3.2, 0)
-		d_handle.Parent = game.Workspace
 
-		-- Dropped bomb disappears after exactly 22 seconds
+		if Config.PlacementMode == "CursorTarget" then
+			-- NEW FEATURE: Spawns directly at the 3D mouse hit location (real gear behavior)
+			local targetHit = Mouse.Hit
+			d_handle.CFrame = CFrame.new(targetHit.Position)
+		else
+			-- OLD FEATURE: Drops under avatar and launches forward
+			d_handle.CFrame = hrp.CFrame * CFrame.new(0, -3.2, 0)
+			local bv = Instance.new("BodyVelocity", d_handle)
+			bv.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+			bv.Velocity = ((Mouse.Hit.p - hrp.Position).Unit * 25) + Vector3.new(0, 10, 0)
+			Debris:AddItem(bv, 0.1)
+		end
+
+		d_handle.Parent = game.Workspace
 		Debris:AddItem(d_handle, 22)
 
-		-- Impulse throw towards mouse location
-		local bv = Instance.new("BodyVelocity", d_handle)
-		bv.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-		bv.Velocity = ((Mouse.Hit.p - hrp.Position).Unit * 25) + Vector3.new(0, 10, 0)
-		Debris:AddItem(bv, 0.1)
+		-- Hide tool in hand during cooldown
+		C4Handle.Transparency = 1
 
-		-- Hide tool mesh in hand during cooldown
-		Handle.Transparency = 1
-
-		-- Independent tool return cooldown
 		task.wait(Config.Cooldown)
 
-		Handle.Transparency = 0
+		C4Handle.Transparency = 0
 		Config.CanUse = true
 
 		if Tool.Parent == char and UserInputService.MouseEnabled then
-			if Config.CursorMode == "New" then
-				cursorTextLabel.Text = Config.Name
-			else
-				Mouse.Icon = GUN_CURSOR
-			end
+			Mouse.Icon = GUN_CURSOR
 		end
 	end)
 
@@ -317,7 +269,7 @@ end
 -- 5. INITIALIZATION & MENU EVENT BINDINGS
 -- ============================================================================
 local function InitializeScript(mode)
-	Config.CursorMode = mode
+	Config.PlacementMode = mode
 	startupGui:Destroy()
 	sg.Enabled = true
 
@@ -329,8 +281,8 @@ local function InitializeScript(mode)
 	end)
 end
 
-btnNew.MouseButton1Click:Connect(function() InitializeScript("New") end)
-btnOld.MouseButton1Click:Connect(function() InitializeScript("Old") end)
+btnNew.MouseButton1Click:Connect(function() InitializeScript("CursorTarget") end)
+btnOld.MouseButton1Click:Connect(function() InitializeScript("ClassicThrow") end)
 
 toggle.MouseButton1Click:Connect(function() frame.Visible = not frame.Visible end)
 
@@ -349,9 +301,6 @@ btn.MouseButton1Click:Connect(function()
 			end
 		end
 		Config.Name = newName
-		if Config.CursorMode == "New" then
-			cursorTextLabel.Text = Config.Name
-		end
 	end
 	frame.Visible = false
 end)
@@ -372,12 +321,7 @@ refreshBtn.MouseButton1Click:Connect(function()
 	end
 
 	if UserInputService.MouseEnabled then
-		if Config.CursorMode == "New" then
-			UserInputService.MouseIconEnabled = true
-			customCursorGui.Enabled = false
-		else
-			Mouse.Icon = ""
-		end
+		Mouse.Icon = ""
 	end
 
 	Config.CanUse = true
